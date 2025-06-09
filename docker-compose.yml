@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  bot:
+    build: .
+    env_file: .env
+    depends_on:
+      - db
+    restart: always
+    networks:
+      - botnet
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: abitdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: пароль_от_бд
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - botnet
+
+volumes:
+  pgdata:
+
+networks:
+  botnet:
