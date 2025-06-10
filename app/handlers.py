@@ -6,6 +6,7 @@ import re
 from app.states import Registration, Menu
 from app.db import Database
 from app.middlewares import InjectDatabaseMiddleware
+from app.email_utils import send_error_report
 
 router = Router()
 
@@ -206,13 +207,16 @@ async def report_start(message: types.Message, state: FSMContext):
     await message.answer("Опишите проблему, которую вы хотите сообщить:")
 
 @router.message(Menu.report_issue)
-async def handle_issue_report(message: types.Message, state: FSMContext):
-    issue_text = message.text
+async def handle_report(message: types.Message, state: FSMContext):
+    user_text = message.text
+    user_id = message.from_user.id
 
-    # Псевдосенд (заменить на отправку письма или логгирование)
-    print(f"[ОШИБКА ОТ {message.from_user.id}]: {issue_text}")
-    # можно сохранить issue_text в БД или пересылать на email/Telegram
+    try:
+        send_error_report(user_id, user_text)
+        await message.answer("Спасибо! Ваше сообщение отправлено.")
+    except Exception as e:
+        await message.answer("Не удалось отправить сообщение. Попробуйте позже.")
+        print("Ошибка при отправке email:", e)
 
-    await message.answer("Спасибо! Ваше сообщение отправлено в приёмную комиссию.")
-    await menu_command(message, state)
+    await state.set_state(Menu.main)
 

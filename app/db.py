@@ -34,7 +34,7 @@ class Database:
         async with self.pool.acquire() as conn:
             applicant = await conn.fetchrow("SELECT * FROM applicants WHERE telegram_id=$1", telegram_id)
             if applicant:
-                # Обновляем данные
+                # обновляем данные
                 await conn.execute("""
                     UPDATE applicants SET 
                         phone=COALESCE($2, phone),
@@ -45,7 +45,7 @@ class Database:
                     WHERE telegram_id=$1
                 """, telegram_id, phone, email, inn, fullname, step)
             else:
-                # Создаем нового абитуриента
+                # создаем нового абитуриента (если такого еще нет)
                 await conn.execute("""
                     INSERT INTO applicants (telegram_id, phone, email, inn, fullname, registration_step)
                     VALUES ($1, $2, $3, $4, $5, $6)

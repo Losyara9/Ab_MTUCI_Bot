@@ -6,7 +6,7 @@ from app.db import Database
 
 class InjectDatabaseMiddleware(BaseMiddleware):
     def __init__(self, db: Database):
-        self.db = db
+        self.db = db # сохранение экземпляра бд
         super().__init__()
 
     async def __call__(
@@ -15,5 +15,5 @@ class InjectDatabaseMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        data["db"] = self.db  # 👈 передаём db в data
+        data["db"] = self.db  # передаем db в data
         return await handler(event, data)

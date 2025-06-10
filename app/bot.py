@@ -15,8 +15,9 @@ async def main():
 
     await db.connect()  # подключение к бд
 
-    register_handlers(dp, db)
+    register_handlers(dp, db) # регистрация обработчиков
 
+    # команды бота
     await bot.set_my_commands([
         BotCommand(command="start", description="Начать регистрацию"),
     ])
