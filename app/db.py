@@ -1,5 +1,4 @@
 import asyncpg
-from app.config import DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASS
 
 class Database:
     def __init__(self):
@@ -15,42 +14,44 @@ class Database:
         )
         await self.create_tables()
 
+
     async def create_tables(self):
-        query = """
+        # Уже есть создание applicants
+        applicants_query = """
         CREATE TABLE IF NOT EXISTS applicants (
             id SERIAL PRIMARY KEY,
             telegram_id BIGINT UNIQUE NOT NULL,
-            phone TEXT,
+            phone TEXT UNIQUE NOT NULL,
             email TEXT,
-            inn TEXT,
-            fullname TEXT,
-            registration_step INT DEFAULT 0
+            registration_step INT DEFAULT 0,
+            username text
         );
         """
         async with self.pool.acquire() as conn:
-            await conn.execute(query)
+            await conn.execute(applicants_query)
 
-    async def add_or_update_applicant(self, telegram_id, phone=None, email=None, inn=None, fullname=None, step=None):
+    async def add_or_update_applicant(self, telegram_id, phone=None, email=None, step=None, username=None):
         async with self.pool.acquire() as conn:
             applicant = await conn.fetchrow("SELECT * FROM applicants WHERE telegram_id=$1", telegram_id)
             if applicant:
-                # обновляем данные
                 await conn.execute("""
                     UPDATE applicants SET 
                         phone=COALESCE($2, phone),
                         email=COALESCE($3, email),
-                        inn=COALESCE($4, inn),
-                        fullname=COALESCE($5, fullname),
-                        registration_step=COALESCE($6, registration_step)
+                        registration_step=COALESCE($4, registration_step),
+                        username=COALESCE($5, username)
                     WHERE telegram_id=$1
-                """, telegram_id, phone, email, inn, fullname, step)
+                """, telegram_id, phone, email, step, username)
             else:
-                # создаем нового абитуриента (если такого еще нет)
                 await conn.execute("""
-                    INSERT INTO applicants (telegram_id, phone, email, inn, fullname, registration_step)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                """, telegram_id, phone, email, inn, fullname, step or 0)
+                    INSERT INTO applicants (telegram_id, phone, email, registration_step, username)
+                    VALUES ($1, $2, $3, $4, $5)
+                """, telegram_id, phone, email, step, username or 0)
 
     async def get_applicant(self, telegram_id):
         async with self.pool.acquire() as conn:
             return await conn.fetchrow("SELECT * FROM applicants WHERE telegram_id=$1", telegram_id)
+
+    async def get_applicant_by_phone(self, phone):
+        async with self.pool.acquire() as conn:
+            return await conn.fetchrow("SELECT * FROM applicants WHERE phone=$1", phone)
