@@ -8,6 +8,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 db = Database()  # глобальная БД
 
+
 async def main():
     bot = Bot(token=BOT_TOKEN)
     storage = MemoryStorage()
@@ -15,7 +16,7 @@ async def main():
 
     await db.connect()  # подключение к бд
 
-    register_handlers(dp, db) # регистрация обработчиков
+    register_handlers(dp, db)  # регистрация обработчиков
 
     # команды бота
     await bot.set_my_commands([

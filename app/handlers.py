@@ -3,7 +3,8 @@ from aiogram.client.session import aiohttp
 from aiogram.fsm.context import FSMContext
 from aiogram.filters import Command
 from aiogram.types import ReplyKeyboardRemove
-import re, os
+import re
+import os
 import requests
 
 from app.logger import log_api_call
@@ -17,6 +18,7 @@ router = Router()
 API_URL = "http://get-info-stud.dev-lik.ru/api.php"
 LOGIN = "mtuci"
 PASSWORD = "superpass"
+
 
 async def get_abiturient_id(phone: str) -> int | None:
     payload = {
@@ -32,13 +34,16 @@ async def get_abiturient_id(phone: str) -> int | None:
                 return result["data"].get("id")
     return None
 
-async def is_registered(telegram_id: int, db: Database) -> bool: # проверка на регистрацию
+
+async def is_registered(telegram_id: int, db: Database) -> bool:  # проверка на регистрацию
     applicant = await db.get_applicant(telegram_id)
     return applicant is not None
 
-def register_handlers(dp: Dispatcher, db: Database): # вызов регистрации
+
+def register_handlers(dp: Dispatcher, db: Database):  # вызов регистрации
     router.message.middleware(InjectDatabaseMiddleware(db))
     dp.include_router(router)
+
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext, db: Database):
@@ -58,17 +63,19 @@ async def cmd_start(message: types.Message, state: FSMContext, db: Database):
         await message.answer("Привет! Для начала регистрации нажмите кнопку 'Начать'.", reply_markup=keyboard)
 
 
-@router.message(F.text.casefold() == "начать") # отправка номера телефона
+@router.message(F.text.casefold() == "начать")  # отправка номера телефона
 async def start_registration(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="Отправить номер телефона", request_contact=True)]
+            [types.KeyboardButton(
+                text="Отправить номер телефона", request_contact=True)]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
     )
     await message.answer("Пожалуйста, отправьте ваш номер телефона:", reply_markup=keyboard)
     await state.set_state(Registration.waiting_for_phone)
+
 
 def check_phone_exists(phone: str) -> bool:
     payload = {
@@ -82,6 +89,7 @@ def check_phone_exists(phone: str) -> bool:
         data = response.json()
         return data.get("success", False)
     return False
+
 
 @router.message(F.contact)
 async def phone_received(message: types.Message, state: FSMContext, **kwargs):
@@ -109,6 +117,7 @@ def is_valid_email(email: str) -> bool:
     pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     return re.match(pattern, email) is not None
 
+
 @router.message(Registration.waiting_for_email)
 async def email_received(message: types.Message, state: FSMContext, **kwargs):
     db: Database = kwargs["db"]
@@ -127,9 +136,12 @@ async def email_received(message: types.Message, state: FSMContext, **kwargs):
     await message.answer("Код подтверждения отправлен на вашу почту. Введите четырехзначный код")
     await state.set_state(Registration.waiting_for_code)
 
+
 @router.message(Registration.waiting_for_code)
 async def check_code(message: types.Message, state: FSMContext, **kwargs):
     user_code = message.text.strip()
+    telegram_id = message.from_user.id
+    username = message.from_user.username
     data = await state.get_data()
 
     if user_code != data.get("code"):
@@ -138,25 +150,64 @@ async def check_code(message: types.Message, state: FSMContext, **kwargs):
 
     # Сохраняем email и step
     db: Database = kwargs["db"]
-    await db.add_or_update_applicant(
-        telegram_id=message.from_user.id,
-        email=data["email"],
-        step=2
-    )
 
-    await message.answer("Email подтверждён. Регистрация завершена.")
-    await menu_command(message, state)
-    await menu_command(message, state)
+    try:
+        await db.add_or_update_applicant(
+            telegram_id=message.from_user.id,
+            email=data["email"],
+            step=2
+        )
 
-def is_valid_inn(inn: str) -> bool: # проверка ввода инн
+        email = data["email"]
+        applicant = await db.get_applicant(telegram_id)
+        abiturient_data = await get_abiturient_data(applicant["phone"], db)
+        abiturient_id = abiturient_data["id"]
+
+        payload = {
+            "login": LOGIN,
+            "password": PASSWORD,
+            "method": "UpdateEmail",
+            "abiturient_id": abiturient_id,
+            "email": email
+        }
+
+        if telegram_id:
+            await log_api_call(telegram_id, "UpdateEmail", payload, username=username, type_="request")
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(API_URL, json=payload) as resp:
+                result = await resp.json()
+
+        if telegram_id:
+            await log_api_call(telegram_id, "UpdateEmail", result, username=username, type_="response")
+
+        await message.answer("Email подтверждён. Регистрация завершена.")
+        await menu_command(message, state)
+
+    except Exception as e:
+        await log_api_call(
+            telegram_id=telegram_id,
+            method="UpdateEmail",
+            username=username,
+            type_="error",
+            data={"error": str(e)})
+
+        await message.answer(
+            "Произошла ошибка при подтверждении email. Пожалуйста, попробуйте снова чуть позже."
+        )
+
+
+def is_valid_inn(inn: str) -> bool:  # проверка ввода инн
     return inn.isdigit() and len(inn) == 12
+
 
 @router.message(Command("menu"))
 async def menu_command(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
             [types.KeyboardButton(text="📋 Получить информацию")],
-            [types.KeyboardButton(text="✏ Изменить ИНН"), types.KeyboardButton(text="✏ Изменить Email")],
+            [types.KeyboardButton(text="✏ Изменить ИНН"),
+             types.KeyboardButton(text="✏ Изменить Email")],
             [types.KeyboardButton(text="🛠 Сообщить об ошибке")],
         ],
         resize_keyboard=True
@@ -166,7 +217,7 @@ async def menu_command(message: types.Message, state: FSMContext):
 
 
 @router.message(lambda message: message.text == "🔙 Назад")
-async def back_to_menu(message: types.Message, state: FSMContext, **kwargs):
+async def back_to_menu(message: types.Message, state: FSMContext):
     await menu_command(message, state)
 
 
@@ -186,8 +237,8 @@ async def choose_info_type(message: types.Message, state: FSMContext):
     await state.set_state(Menu.choose_info_type)
     await message.answer("Что вы хотите узнать?", reply_markup=keyboard)
 
-async def get_abiturient_data(phone: str, db: Database) -> dict | None:
 
+async def get_abiturient_data(phone: str, db: Database) -> dict | None:
     applicant = await db.get_applicant_by_phone(phone)
     telegram_id = applicant["telegram_id"] if applicant else None
     username = applicant["username"] if applicant and "username" in applicant else "-"
@@ -206,23 +257,21 @@ async def get_abiturient_data(phone: str, db: Database) -> dict | None:
         async with session.post(API_URL, json=payload) as resp:
             result = await resp.json()
     if telegram_id:
-        await log_api_call(telegram_id, "GetAbiturient", payload, username=username, type_="request")
+        await log_api_call(telegram_id, "GetAbiturient", result, username=username, type_="response")
 
     if result.get("success"):
         return result["data"]
     return None
 
+
 @router.message(Menu.choose_info_type)
 async def info_handler(message: types.Message, state: FSMContext, db: Database):
     text = message.text
     telegram_id = message.from_user.id
+    username = message.from_user.username
 
     applicant = await db.get_applicant(telegram_id)
     phone = applicant["phone"] if applicant else None
-
-    if not phone:
-        await message.answer("Невозможно найти ваш номер телефона. Пожалуйста, пройдите регистрацию.")
-        return
 
     abiturient_data = await get_abiturient_data(phone, db)
     if not abiturient_data:
@@ -238,9 +287,16 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
             "method": "GetApplication",
             "abiturient_id": abiturient_id
         }
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetApplication", payload, username=username, type_="request")
+
         async with aiohttp.ClientSession() as session:
             async with session.post(API_URL, json=payload) as resp:
                 result = await resp.json()
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetApplication", result, username=username, type_="response")
 
         if not result.get("success") or not result.get("data"):
             await message.answer("У вас пока нет поданных заявлений.")
@@ -262,9 +318,16 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
             "method": "GetEntranceTests",
             "abiturient_id": abiturient_id
         }
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetEntranceTests", payload, username=username, type_="request")
+
         async with aiohttp.ClientSession() as session:
             async with session.post(API_URL, json=payload) as resp:
                 result = await resp.json()
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetEntranceTests", result, username=username, type_="response")
 
         if not result.get("success") or not result.get("data"):
             await message.answer("Информация о вступительных экзаменах недоступна.")
@@ -287,9 +350,16 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
             "method": "GetExamResults",
             "abiturient_id": abiturient_id
         }
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetExamResults", payload, username=username, type_="request")
+
         async with aiohttp.ClientSession() as session:
             async with session.post(API_URL, json=payload) as resp:
                 result = await resp.json()
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetExamResults", result, username=username, type_="response")
 
         if not result.get("success") or not result.get("data"):
             await message.answer("Результаты экзаменов недоступны.")
@@ -304,7 +374,8 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
             date = exam.get("exam_date", "-")
 
             if "ЕГЭ" in name.upper():
-                ege_results.append(f"• {name.replace('ЕГЭ ', '')}: {score} (от {date})")
+                ege_results.append(
+                    f"• {name.replace('ЕГЭ ', '')}: {score} (от {date})")
             else:
                 vstup_results.append(f"• {name}: {score} (от {date})")
 
@@ -323,9 +394,16 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
             "method": "GetAchievements",
             "abiturient_id": abiturient_id
         }
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetAchievements", payload, username=username, type_="request")
+
         async with aiohttp.ClientSession() as session:
             async with session.post(API_URL, json=payload) as resp:
                 result = await resp.json()
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetAchievements", result, username=username, type_="response")
 
         if not result.get("success") or not result.get("data"):
             await message.answer("Информация об индивидуальных достижениях отсутствует.")
@@ -342,7 +420,6 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
 
         await message.answer(msg.strip())
 
-
     elif text == "📧 Моя почта":
         payload = {
             "login": LOGIN,
@@ -350,16 +427,22 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
             "method": "GetEmail",
             "phone_number": phone
         }
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetEmail", payload, username=username, type_="request")
+
         async with aiohttp.ClientSession() as session:
             async with session.post(API_URL, json=payload) as resp:
                 result = await resp.json()
+
+        if telegram_id:
+            await log_api_call(telegram_id, "GetEmail", result, username=username, type_="response")
 
         if result.get("success") and result.get("data"):
             email = result["data"].get("email", "не указан")
             await message.answer(f"📧 Текущий email: {email}")
         else:
             await message.answer("Не удалось получить email. Попробуйте позже.")
-
 
     elif text == "🔙 Назад":
         await message.answer("Вы вернулись в главное меню.", reply_markup=types.ReplyKeyboardRemove())
@@ -374,9 +457,12 @@ async def start_change_inn(message: types.Message, state: FSMContext):
     await state.set_state(Menu.change_inn)
     await message.answer("Введите новый ИНН:")
 
+
 @router.message(Menu.change_inn)
 async def save_new_inn(message: types.Message, state: FSMContext, db: Database):
     inn = message.text.strip()
+    telegram_id = message.from_user.id
+    username = message.from_user.username
     if not is_valid_inn(inn):
         await message.answer("❗ ИНН должен содержать ровно 12 цифр. Попробуйте снова.")
         return
@@ -393,9 +479,15 @@ async def save_new_inn(message: types.Message, state: FSMContext, db: Database):
         "inn": inn
     }
 
+    if telegram_id:
+        await log_api_call(telegram_id, "UpdateINN", payload, username=username, type_="request")
+
     async with aiohttp.ClientSession() as session:
         async with session.post(API_URL, json=payload) as resp:
             result = await resp.json()
+
+    if telegram_id:
+        await log_api_call(telegram_id, "UpdateINN", result, username=username, type_="response")
 
     if result.get("success"):
         await message.answer("ИНН успешно обновлён ✅")
@@ -403,10 +495,12 @@ async def save_new_inn(message: types.Message, state: FSMContext, db: Database):
         await message.answer(f"Не удалось обновить ИНН: {result.get('message', 'ошибка')}")
     await menu_command(message, state)
 
+
 @router.message(Menu.main, F.text == "✏ Изменить Email")
 async def start_change_email(message: types.Message, state: FSMContext):
     await state.set_state(Menu.change_email)
     await message.answer("Введите новый email:")
+
 
 @router.message(Menu.change_email)
 async def save_new_email_and_send_code(message: types.Message, state: FSMContext):
@@ -422,10 +516,13 @@ async def save_new_email_and_send_code(message: types.Message, state: FSMContext
     await state.set_state(Menu.waiting_for_email_code)
     await message.answer("На указанный email отправлен 4-значный код. Введите его для подтверждения:")
 
+
 @router.message(Menu.waiting_for_email_code)
 async def confirm_email_code_and_update(message: types.Message, state: FSMContext, db: Database):
     user_code = message.text.strip()
     data = await state.get_data()
+    telegram_id = message.from_user.id
+    username = message.from_user.username
 
     if user_code != data.get("code"):
         await message.answer("Неверный код. Попробуйте ещё раз.")
@@ -444,9 +541,15 @@ async def confirm_email_code_and_update(message: types.Message, state: FSMContex
         "email": email
     }
 
+    if telegram_id:
+        await log_api_call(telegram_id, "UpdateEmail", payload, username=username, type_="request")
+
     async with aiohttp.ClientSession() as session:
         async with session.post(API_URL, json=payload) as resp:
             result = await resp.json()
+
+    if telegram_id:
+        await log_api_call(telegram_id, "UpdateEmail", result, username=username, type_="response")
 
     if result.get("success"):
         await db.add_or_update_applicant(telegram_id=message.from_user.id, email=email)
@@ -461,6 +564,7 @@ async def confirm_email_code_and_update(message: types.Message, state: FSMContex
 async def report_start(message: types.Message, state: FSMContext):
     await state.set_state(Menu.report_issue)
     await message.answer("Опишите проблему, которую вы хотите сообщить:")
+
 
 @router.message(Menu.report_issue)
 async def handle_report(message: types.Message, state: FSMContext, **kwargs):
