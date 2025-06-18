@@ -1,5 +1,5 @@
 import asyncpg
-from logger import log_event, log_error
+from app.logger import log_event, log_error
 
 
 class Database:
