@@ -21,6 +21,7 @@ async def main():
     # команды бота
     await bot.set_my_commands([
         BotCommand(command="start", description="Начать регистрацию"),
+        BotCommand(command="help", description="Помощь и описание возможностей")
     ])
 
     print("Бот запущен...")

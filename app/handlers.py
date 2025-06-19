@@ -50,17 +50,45 @@ async def cmd_start(message: types.Message, state: FSMContext, db: Database):
     await state.clear()
     telegram_id = message.from_user.id
 
-    if await is_registered(telegram_id, db):
-        await message.answer("Вы уже зарегистрированы ✅")
+    is_reg = await is_registered(telegram_id, db)
+
+    text = (
+        f"👋 Привет, {message.from_user.full_name}!\n\n"
+        "Я — бот приёмной комиссии\n"
+        "С моей помощью вы можете:\n"
+        "• 🔎 Получить информацию о своих заявлениях\n"
+        "• 📋 Узнать результаты вступительных испытаний\n"
+        "• 🏆 Посмотреть индивидуальные достижения\n"
+        "• 📧 Проверить и подтвердить email\n"
+        "• ❗ Отправить жалобу\n\n"
+    )
+
+    if is_reg:
+        text += "Вы уже зарегистрированы ✅\nОткрываю главное меню:"
+        await message.answer(text)
         await menu_command(message, state)
     else:
+        text += "Чтобы начать регистрацию, нажмите кнопку 'Начать' ⬇️"
         keyboard = types.ReplyKeyboardMarkup(
-            keyboard=[
-                [types.KeyboardButton(text="Начать")]
-            ],
+            keyboard=[[types.KeyboardButton(text="Начать")]],
             resize_keyboard=True
         )
-        await message.answer("Привет! Для начала регистрации нажмите кнопку 'Начать'.", reply_markup=keyboard)
+        await message.answer(text, reply_markup=keyboard)
+
+
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    text = (
+        "🆘 <b>Справка</b>\n\n"
+        "Вот что умеет этот бот:\n"
+        "• 📄 Регистрация абитуриента\n"
+        "• 📬 Подтверждение email (код на почту)\n"
+        "• 🧾 Получение информации о заявлениях, экзаменах и достижениях\n"
+        "• 🗣 Отправка жалоб с прикреплёнными файлами\n\n"
+        "Для начала используйте команду /start или нажмите кнопку 'Начать'."
+    )
+    await message.answer(text, parse_mode="HTML")
+
 
 
 @router.message(F.text.casefold() == "начать")  # отправка номера телефона
