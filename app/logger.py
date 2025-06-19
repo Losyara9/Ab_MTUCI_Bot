@@ -2,7 +2,9 @@ import logging
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 
-Path("logs").mkdir(exist_ok=True)
+BASE_DIR = Path(__file__).resolve().parent.parent  # для app/logger.py — это корень проекта
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(exist_ok=True)
 
 
 def make_rotating_logger(name, filename, fmt, level=logging.INFO):
@@ -11,7 +13,7 @@ def make_rotating_logger(name, filename, fmt, level=logging.INFO):
 
     if not logger.hasHandlers():
         handler = RotatingFileHandler(
-            f"logs/{filename}", maxBytes=1_000_000, backupCount=5, encoding="utf-8"
+            LOG_DIR / filename, maxBytes=1_000_000, backupCount=5, encoding="utf-8"
         )
         formatter = logging.Formatter(fmt=fmt, datefmt="%Y-%m-%d %H:%M:%S", style="{")
         handler.setFormatter(formatter)
