@@ -12,6 +12,7 @@ from app.states import Registration, Menu
 from app.db import Database
 from app.middlewares import InjectDatabaseMiddleware
 from app.email_utils import send_error_report, generate_code, send_verification_code
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 router = Router()
 
@@ -141,6 +142,28 @@ async def phone_received(message: types.Message, state: FSMContext, **kwargs):
     await state.set_state(Registration.waiting_for_email)
 
 
+exit_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="↩️ Ввести email заново")]],
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
+
+@router.message(F.text == "↩️ Ввести email заново")
+async def restart_email_input(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+
+    if current_state == Registration.waiting_for_code:
+        await state.set_state(Registration.waiting_for_email)
+        await message.answer("Введите ваш email для регистрации:", reply_markup=types.ReplyKeyboardRemove())
+
+    elif current_state == Menu.waiting_for_email_code:
+        await state.set_state(Menu.change_email)
+        await message.answer("Введите новый email:", reply_markup=types.ReplyKeyboardRemove())
+
+    else:
+        await message.answer("Вы не находитесь на этапе подтверждения email.")
+
+
 def is_valid_email(email: str) -> bool:
     pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     return re.match(pattern, email) is not None
@@ -161,7 +184,11 @@ async def email_received(message: types.Message, state: FSMContext, **kwargs):
     await state.update_data(email=email, code=code)
     await db.add_or_update_applicant(telegram_id=message.from_user.id, email=email, step=2)
 
-    await message.answer("Код подтверждения отправлен на вашу почту. Введите четырехзначный код")
+    await message.answer(
+        "Код подтверждения отправлен на вашу почту. Введите четырехзначный код.\n"
+        "Если вы ввели неправильную почту — нажмите «↩️ Ввести email заново».",
+        reply_markup=exit_keyboard
+    )
     await state.set_state(Registration.waiting_for_code)
 
 
@@ -242,6 +269,17 @@ async def menu_command(message: types.Message, state: FSMContext):
     )
     await state.set_state(Menu.main)
     await message.answer("Добро пожаловать в личный кабинет. Выберите действие:", reply_markup=keyboard)
+
+
+back_to_menu_keyboard = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="🔙 Назад в меню")]],
+    resize_keyboard=True,
+    one_time_keyboard=True
+)
+
+@router.message(F.text == "🔙 Назад в меню")
+async def back_to_main_menu(message: types.Message, state: FSMContext):
+    await menu_command(message, state)
 
 
 @router.message(lambda message: message.text == "🔙 Назад")
@@ -483,7 +521,7 @@ async def info_handler(message: types.Message, state: FSMContext, db: Database):
 @router.message(Menu.main, F.text == "✏ Изменить ИНН")
 async def start_change_inn(message: types.Message, state: FSMContext):
     await state.set_state(Menu.change_inn)
-    await message.answer("Введите новый ИНН:")
+    await message.answer("Введите новый ИНН:", reply_markup=back_to_menu_keyboard)
 
 
 @router.message(Menu.change_inn)
@@ -542,7 +580,11 @@ async def save_new_email_and_send_code(message: types.Message, state: FSMContext
 
     await state.update_data(email=email, code=code)
     await state.set_state(Menu.waiting_for_email_code)
-    await message.answer("На указанный email отправлен 4-значный код. Введите его для подтверждения:")
+    await message.answer(
+        "Код подтверждения отправлен на вашу почту. Введите четырехзначный код.\n"
+        "Если вы ввели неправильную почту — нажмите «↩️ Ввести email заново».",
+        reply_markup=exit_keyboard
+    )
 
 
 @router.message(Menu.waiting_for_email_code)
@@ -591,7 +633,7 @@ async def confirm_email_code_and_update(message: types.Message, state: FSMContex
 @router.message(Menu.main, F.text == "🛠 Сообщить об ошибке")
 async def report_start(message: types.Message, state: FSMContext):
     await state.set_state(Menu.report_issue)
-    await message.answer("Опишите проблему, которую вы хотите сообщить:")
+    await message.answer("Опишите проблему, которую вы хотите сообщить:", reply_markup=back_to_menu_keyboard)
 
 
 @router.message(Menu.report_issue)
