@@ -91,7 +91,6 @@ async def cmd_help(message: types.Message):
     await message.answer(text, parse_mode="HTML")
 
 
-
 @router.message(F.text.casefold() == "начать")  # отправка номера телефона
 async def start_registration(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(
@@ -147,6 +146,7 @@ exit_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True,
     one_time_keyboard=True
 )
+
 
 @router.message(F.text == "↩️ Ввести email заново")
 async def restart_email_input(message: types.Message, state: FSMContext):
@@ -252,8 +252,29 @@ async def check_code(message: types.Message, state: FSMContext, **kwargs):
         )
 
 
-def is_valid_inn(inn: str) -> bool:  # проверка ввода инн
-    return inn.isdigit() and len(inn) == 12
+def is_valid_inn(inn: str) -> bool:
+    if len(inn) != 12 or not inn.isdigit():
+        return False
+
+    weights_11 = [7, 2, 4, 10, 3, 5, 9, 4, 6, 8]
+    weights_12 = [3, 7, 2, 4, 10, 3, 5, 9, 4, 6, 8]
+
+    def calc_control(digits, weights):
+        total = sum(int(d) * w for d, w in zip(digits, weights))
+        remainder = total % 11
+        if remainder == 10:
+            remainder = 0
+        return remainder
+
+    control_11 = calc_control(inn[:10], weights_11)
+    if control_11 != int(inn[10]):
+        return False
+
+    control_12 = calc_control(inn[:11], weights_12)
+    if control_12 != int(inn[11]):
+        return False
+
+    return True
 
 
 @router.message(Command("menu"))
@@ -276,6 +297,7 @@ back_to_menu_keyboard = ReplyKeyboardMarkup(
     resize_keyboard=True,
     one_time_keyboard=True
 )
+
 
 @router.message(F.text == "🔙 Назад в меню")
 async def back_to_main_menu(message: types.Message, state: FSMContext):
