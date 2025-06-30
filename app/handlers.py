@@ -552,7 +552,7 @@ async def save_new_inn(message: types.Message, state: FSMContext, db: Database):
     telegram_id = message.from_user.id
     username = message.from_user.username
     if not is_valid_inn(inn):
-        await message.answer("❗ ИНН должен содержать ровно 12 цифр. Попробуйте снова.")
+        await message.answer("❗ Неверный формат ИНН. Попробуйте снова.")
         return
 
     applicant = await db.get_applicant(message.from_user.id)
