@@ -55,19 +55,23 @@ Telegram-бот, разработанный для автоматизации и
 -   **Внутренняя ИС вуза:** Получение актуальной информации о ходе приемной кампании для рассылки уведомлений.
 
 ## Скриншоты интерфейса
+    
+  **Начало регистрации**
 
-<details>
-  Начало регистрации
+    
 <img width="549" height="705" alt="image" src="https://github.com/user-attachments/assets/8a9565f4-dcd6-48b3-af6d-96de74aff086" />
 
-  Завершение регистрации
+
+  **Завершение регистрации**
+
+  
 <img width="509" height="611" alt="image" src="https://github.com/user-attachments/assets/7d6678c6-01dc-4a11-847d-f36d7dae4c94" />
 
-  Информация пользователя
+  **Информация пользователя**
+
+  
 <img width="366" height="687" alt="image" src="https://github.com/user-attachments/assets/82d5ba35-c321-46e2-8933-feeeb72d7731" />
 
-
-</details>
 
 ## Тестирование
 
